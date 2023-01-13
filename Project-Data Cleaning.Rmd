@@ -1,0 +1,49 @@
+---
+title: "Project-Data Cleaning"
+author: "Jenny Li"
+date: "9/25/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(readr)
+#load necessary packages for this project
+```
+
+
+```{r}
+#read original data
+adjusted_net_saving <- read.csv("/Users/jennyli/Desktop/Adjusted-Net-SavingsData.csv")
+#Note you might need to change the file path of the csv file
+#Original Data available at http://databank.worldbank.org/data/download/Adjusted-Net-Savings_CSV.zip
+# and it is the Adjusted-Net-SavingsData.csv
+
+#clean the data by dropping unnecessary variables first
+selected_net_saving <- select(adjusted_net_saving, Country.Name, Indicator.Name, X2000:X2018)
+
+#keep only rows that contains information about "Adjusted net national income (current US$)"
+selected_net_saving_indicator <- filter(selected_net_saving, Indicator.Name == "Adjusted net national income (current US$)")
+
+# reduce the data set to only rows with no missing values
+selected_net_saving_indicator_new <- na.omit (selected_net_saving_indicator)
+
+#clean the data set to only countries
+almosttidy_net_saving <- slice (selected_net_saving_indicator_new, 43 : 264)
+
+#further tidy the data set with gather
+tidy_net_saving <- gather (data = almosttidy_net_saving, key = Year, value = Value, X2000: X2018)
+
+#removing characters from the variable: Year
+tidy_net_saving$Year <- parse_number(tidy_net_saving$Year)
+                          
+#output the cleaned dataset
+write.csv(tidy_net_saving, "tidy_net_saving.csv")
+
+```
+
