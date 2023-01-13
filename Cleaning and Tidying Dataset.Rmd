@@ -1,0 +1,104 @@
+---
+title: "Final Project - Importing and Cleaning Data"
+author: "Nora, Eve, Quan, Jenny"
+date: "5/10/2021"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE} 
+library(ggplot2);library(readr);library(tidyr);require(gridExtra);require(leaps)
+library(tidyverse);library(readxl);require(mosaic);library(dplyr)
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=65),tidy=TRUE)
+```
+
+## Reading the data set into RStudio
+```{r}
+WDIData<-read.csv("WDIData.csv")
+WDIData<-WDIData %>%
+  rename(Country.Name=ï..Country.Name)
+south.africa.wdi<-filter(WDIData, Country.Name =="South Africa")
+colnames(south.africa.wdi)
+
+#extracting the indicators within the filtered dataset
+indicators <- levels(as.factor(south.africa.wdi$Indicator.Name))
+#converting the indicators into a data frame
+indicators <- as.data.frame(indicators)
+```
+
+## Filtering the dataset by only keeping the desired indicators
+```{r}
+WDIData.filtered <- filter(WDIData, 
+                           Indicator.Name == "Adolescents out of school, female (% of female lower secondary school age)"
+                           | Indicator.Name == "Children out of school, primary, female"
+                           | Indicator.Name == "Condom use, population ages 15-24, female (% of females ages 15-24)"
+                           | Indicator.Name == "Educational attainment, at least Bachelor's or equivalent, population 25+, female (%) (cumulative)" 
+                           | Indicator.Name == "Educational attainment, at least Bachelor's or equivalent, population 25+, male (%) (cumulative)" 
+                           | Indicator.Name == "Labor force participation rate, female (% of female population ages 15+) (modeled ILO estimate)" 
+                           | Indicator.Name == "Life expectancy at birth, female (years)" 
+                           | Indicator.Name == "Literacy rate, adult female (% of females ages 15 and above)"
+                           | Indicator.Name == "Population, female" 
+                           | Indicator.Name == "Primary education, pupils (% female)" 
+                           | Indicator.Name == "Primary education, teachers (% female)"
+                           | Indicator.Name == "Progression to secondary school, female (%)" 
+                           | Indicator.Name == "Ratio of female to male labor force participation rate (%) (modeled ILO estimate)" 
+                           | Indicator.Name == "Suicide mortality rate, female (per 100,000 female population)"
+                           | Indicator.Name == "Total alcohol consumption per capita, female (liters of pure alcohol, projected estimates, female 15+ years of age)" 
+                           | Indicator.Name == "GDP (current US$)" 
+                           | Indicator.Name == "GDP per capita (current US$)"
+                           | Indicator.Name == "Inflation, GDP deflator (annual %)" 
+                           | Indicator.Name == "Number of maternal deaths" 
+                           | Indicator.Name == "Female share of employment in senior and middle management (%)"
+                           | Indicator.Name == "Research and development expenditure (% of GDP)" 
+                           | Indicator.Name == "Contraceptive prevalence, any methods (% of women ages 15-49)" 
+                           | Indicator.Name == "Urban population (% of total population)"
+                           | Indicator.Name == "Adequacy of social safety net programs (% of total welfare of beneficiary households)"
+                           | Indicator.Name == "Educational attainment, at least Master's or equivalent, population 25+, female (%) (cumulative)" 
+                           | Indicator.Name == "Educational attainment, at least Master's or equivalent, population 25+, male (%) (cumulative)"
+                           | Indicator.Name == "Educational attainment, Doctoral or equivalent, population 25+, female (%) (cumulative)" 
+                           | Indicator.Name == "Educational attainment, Doctoral or equivalent, population 25+, male (%) (cumulative)" 
+                           | Indicator.Name == "Women who were first married by age 15 (% of women ages 20-24)"
+                           | Indicator.Name == "Fertility rate, total (births per woman)"
+                           | Indicator.Name == "Prevalence of anemia among non-pregnant women (% of women ages 15-49)" 
+                           | Indicator.Name == "Prevalence of anemia among pregnant women (%)" 
+                           | Indicator.Name == "Proportion of women subjected to physical and/or sexual violence in the last 12 months (% of women age 15-49)"
+                           | Indicator.Name == "Women Business and the Law Index Score (scale 1-100)" 
+                           | Indicator.Name == "Nurses and midwives (per 1,000 people)" 
+                           | Indicator.Name == "Trained teachers in lower secondary education (% of total teachers)"
+                           | Indicator.Name == "Land area (sq. km)" 
+                           | Indicator.Name == "Teenage mothers (% of women ages 15-19 who have had children or are currently pregnant)" 
+                           | Indicator.Name == "Self-employed, female (% of female employment) (modeled ILO estimate)"
+                           | Indicator.Name == "Employment in agriculture, female (% of female employment) (modeled ILO estimate)" 
+                           | Indicator.Name == "Employment in industry, female (% of female employment) (modeled ILO estimate)" 
+                           | Indicator.Name == "Employment in services, female (% of female employment) (modeled ILO estimate)"
+ )
+```
+
+## Keeping only the rows that corresponding to specific countries in the filted dataset by removing the first 1927 rows
+```{r}
+WDIData.filtered <- slice (WDIData.filtered, -(1:1927))
+```
+
+## Cleaning and tidying the dataset WDIData.filtered:
+```{r}
+tidy.WDIData.filtered<-select(WDIData.filtered,-4)
+tidy.WDIData.filtered<-gather(tidy.WDIData.filtered, key = year, value = number,4:65)
+tidy.WDIData.filtered<-separate(tidy.WDIData.filtered,col = year, into =c("X","year"),sep="X")
+tidy.WDIData.filtered<-select(tidy.WDIData.filtered,-4)
+tidy.WDIData.filtered<-spread(tidy.WDIData.filtered, key = Indicator.Name, value = number)
+
+tidy.WDIData.filtered<-mutate(tidy.WDIData.filtered,"Educational attainment gap at Bachelor's" = tidy.WDIData.filtered$`Educational attainment, at least Bachelor's or equivalent, population 25+, female (%) (cumulative)`- tidy.WDIData.filtered$`Educational attainment, at least Bachelor's or equivalent, population 25+, male (%) (cumulative)`)
+
+tidy.WDIData.filtered<-mutate(tidy.WDIData.filtered,"Educational attainment gap at Master's" = tidy.WDIData.filtered$`Educational attainment, at least Master's or equivalent, population 25+, female (%) (cumulative)`- tidy.WDIData.filtered$`Educational attainment, at least Master's or equivalent, population 25+, male (%) (cumulative)`)
+
+tidy.WDIData.filtered<-mutate(tidy.WDIData.filtered,"Educational attainment gap at Doctoral" = tidy.WDIData.filtered$`Educational attainment, Doctoral or equivalent, population 25+, female (%) (cumulative)`- tidy.WDIData.filtered$`Educational attainment, Doctoral or equivalent, population 25+, male (%) (cumulative)`)
+
+write.csv(tidy.WDIData.filtered, file = "tidy.WDIFiltered.csv")
+```
