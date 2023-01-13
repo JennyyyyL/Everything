@@ -1,0 +1,221 @@
+---
+title: "Final Project-Data Cleaning and Codes for Information covered in the Paper"
+author: "Ziwei Zhao, Jenny Li"
+date: "10/15/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(geojsonio)
+library(factoextra)
+library(leaflet)
+library(caret)
+library(glmnet)
+library(mgcv) 
+#run necessary packages
+```
+
+```{r}
+CovidData <-read.csv("owid-covid-data.csv")
+#import the original data that can be downloaded from "https://covid.ourworldindata.org/data/owid-covid-data.csv"
+
+#Change the format of date column
+CovidData$date<-as.Date(CovidData$date, format = "%Y-%m-%d")
+
+#Load data for countries' longitudes and latitudes
+location<-read.csv("https://raw.githubusercontent.com/albertyw/avenews/master/old/data/average-latitude-longitude-countries.csv")
+colnames(location)[2] <- "location"
+location[185,2]<-"Russia"
+
+#Add countries' longitudes and latitudes to Covid data
+CovidData<-full_join(CovidData,location, by="location")
+
+#Create four subsets for reactive maps
+TotalCasesData<-select(CovidData, iso_code, location, date, total_cases, Latitude, Longitude)
+TotalCasesMillion<-select(CovidData, iso_code, location, date, total_cases_per_million, Latitude, Longitude)
+TotalDeaths<-select(CovidData, iso_code, location, date, total_deaths, Latitude, Longitude)
+TotalDeathsMillion<-select(CovidData, iso_code, location, date, total_deaths_per_million, Latitude, Longitude)
+
+#import the necessary code for the shape of polygons of different countries in the world
+shapeurl <- "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
+
+#name a new data based on the imported code about shapes of polygons
+WorldCountry <- geojson_read(shapeurl, what = "sp")
+
+#Remove Antarctica, which is useless in the map
+WorldCountry <- WorldCountry[-which(WorldCountry$id=="ATA"),]
+
+#Select variables that we are interested in for clustering
+ClusteringData<-select(CovidData,
+                       date,
+                       location,
+                       total_cases_per_million,
+                       new_cases_per_million,
+                       total_deaths_per_million,
+                       new_deaths_per_million,
+                       stringency_index,
+                       gdp_per_capita,
+                       diabetes_prevalence,
+                       life_expectancy)
+
+```
+
+
+```{r}
+#Cleaning Data for Predication Modeling
+
+tidy_data_modeling <- select (CovidData, location, date, total_cases, new_cases, total_deaths, population, population_density, median_age, gdp_per_capita, diabetes_prevalence, life_expectancy )
+#tidy the original data for the map section by selecting desired variables
+
+tidy_data_modeling <- na.omit(tidy_data_modeling)
+#remove all rows with NA
+
+tidy_data_modeling$date<-as.Date(tidy_data_modeling$date, format = "%Y-%m-%d")
+#change the format of date in data_modeling
+
+write.csv(tidy_data_modeling, "tidy_data_modeling.csv")
+#output the cleaned dataset
+```
+
+```{r}
+#Code for deciding which model to use in the App for the choice total_cases
+
+#Extract data of 2020-10-16 specifically from tidy_data_modeling 
+data_10_16 <- filter(tidy_data_modeling, date == "2020-10-16")
+
+#run a multiple linear regression model on total_cases that includes different variables related to a country such as population, population_density, median_age, etc.
+
+fit1 <- lm(data = data_10_16, total_cases ~ population + population_density + median_age + gdp_per_capita + diabetes_prevalence + life_expectancy)
+
+#run a LASSO model on total_cases that includes different variables related to a country such as population, population_density, median_age, etc. using the glmnet package
+## Set up the matrix including dummy vars
+X = model.matrix(data = data_10_16[,6:11], ~ -1 + .)
+y = data_10_16$total_cases
+lasso <- glmnet(x = X, y = y)
+
+#Cross Validation
+fit.control <- trainControl(method = "repeatedcv", number = 5, repeats = 10)
+#models will be evaluated using 10 repeats of 5-fold cross validation
+
+set.seed(123)
+fit.lm1 <- train(total_cases ~ population + population_density + median_age + gdp_per_capita + diabetes_prevalence + life_expectancy, data = data_10_16, method = "lm", trControl = fit.control)
+#train the multiple linear regression model
+
+lams <- expand.grid(alpha = 1, lambda = lasso$lambda)
+set.seed(123)
+fit.lasso <- train(total_cases ~ population + population_density + median_age + gdp_per_capita + diabetes_prevalence + life_expectancy, data = data_10_16, method = "glmnet", trControl = fit.control, tuneGrid = lams)
+#train the LASSO model
+
+rs <- resamples(list(LM = fit.lm1, 
+                     LASSO = fit.lasso))
+#name a new variable rs so that we can use to compare the performance of fit.lm2 and fit.lasso2  
+summary(rs)
+#summarize rs for comparison
+
+xyplot(rs, what = "BlandAltman", metric = "RMSE", models = c("LM", "LASSO"))
+#create a Bland-Altman plot for further comparing LM and LASSO
+
+#Based on the summary and Bland-Altman plot below, it seems like the LASSO model would be more appropriate for predicting total_cases as it is smaller MAE and RMSE compared with the multiple linear regression model
+```
+```{r}
+coef(fit.lasso$finalModel, s = fit.lasso$bestTune$lambda)
+#show the coefficient of different variable within the LASSO model that predicts total cases
+```
+
+
+
+```{r}
+#Code for deciding which model to use in the App for the choice total_deaths
+
+#run a multiple linear regression model on total_deaths that includes different variables related to a country such as population, population_density, median_age, etc.
+
+fit2 <- lm(data = data_10_16, total_deaths ~ population + population_density + median_age + gdp_per_capita + diabetes_prevalence + life_expectancy)
+
+#run a LASSO model on total_deaths that includes different variables related to a country such as population, population_density, median_age, etc. using the glmnet package
+## Set up the matrix including dummy vars
+X = model.matrix(data = data_10_16[,6:11], ~ -1 + .)
+y = data_10_16$total_deaths
+lasso <- glmnet(x = X, y = y)
+
+#Cross Validation
+fit.control <- trainControl(method = "repeatedcv", number = 5, repeats = 10)
+#models will be evaluated using 10 repeats of 5-fold cross validation
+
+set.seed(123)
+fit.lm2 <- train(total_deaths ~ population + population_density + median_age + gdp_per_capita + diabetes_prevalence + life_expectancy, data = data_10_16, method = "lm", trControl = fit.control)
+#train the multiple linear regression model
+
+lams <- expand.grid(alpha = 1, lambda = lasso$lambda)
+set.seed(123)
+fit.lasso2 <- train(total_deaths ~ population + population_density + median_age + gdp_per_capita + diabetes_prevalence + life_expectancy, data = data_10_16, method = "glmnet", trControl = fit.control, tuneGrid = lams)
+#train the LASSO model
+
+rs2 <- resamples(list(LM = fit.lm2, 
+                      LASSO = fit.lasso2))
+#name a new variable rs2 so that we can use to compare the performance of fit.lm2 and fit.lasso2                   
+summary(rs2)
+#summarize rs2 for comparison
+
+#Based on the summary below, it seems like both the multiple regression model and the LASSO model would be appropriate for predicting total_deaths; therefore, we will use the Bland-Altman plot to further explore which model would be better
+
+xyplot(rs2, what = "BlandAltman", metric = "RMSE", models = c("LM", "LASSO"))
+#code for the Bland-Altman plot
+
+#Based on the Bland-Altman plot below, it seems like the LASSO model has a better performance compared with the multiple regression model; therefore, we will use the LASSO model for predicting total_death
+```
+
+```{r}
+coef(fit.lasso2$finalModel, s = fit.lasso2$bestTune$lambda)
+#show the coefficient of different variables within the LASSO model that predicts total death
+```
+
+
+```{r}
+#Code for deciding which model to use in the App for the choice new_cases
+
+#run a multiple linear regression model on new_cases that includes different variables related to a country such as population, population_density, median_age, etc.
+fit3 <- lm(data = data_10_16, new_cases ~ population + population_density + median_age + gdp_per_capita + diabetes_prevalence + life_expectancy)
+
+#run a LASSO model on new_cases that includes different variables related to a country such as population, population_density, median_age, etc. using the glmnet package
+## Set up the matrix including dummy vars
+X = model.matrix(data = data_10_16[,6:11], ~ -1 + .)
+y = data_10_16$new_cases
+lasso <- glmnet(x = X, y = y)
+
+#Cross Validation
+fit.control <- trainControl(method = "repeatedcv", number = 5, repeats = 10)
+#models will be evaluated using 10 repeats of 5-fold cross validation
+
+set.seed(123)
+fit.lm3 <- train(new_cases ~ population + population_density + median_age + gdp_per_capita + diabetes_prevalence + life_expectancy, data = data_10_16, method = "lm", trControl = fit.control)
+#train the multiple linear regression model
+
+lams <- expand.grid(alpha = 1, lambda = lasso$lambda)
+set.seed(123)
+fit.lasso3 <- train(new_cases ~ population + population_density + median_age + gdp_per_capita + diabetes_prevalence + life_expectancy, data = data_10_16, method = "glmnet", trControl = fit.control, tuneGrid = lams)
+#train the LASSO model
+
+rs3 <- resamples(list(LM = fit.lm3, 
+                     LASSO = fit.lasso3))
+#name a new variable rs3 so that we can use to compare the performance of fit.lm3 and fit.lasso3
+summary(rs3)
+#summarize rs3 for comparison
+xyplot(rs3, what = "BlandAltman", metric = "RMSE", models = c("LM", "LASSO"))
+#create a Bland-Altman plot for further comparing LM and LASSO
+
+#Based on the summary and Bland-Altaman plot above, LASSO model would be more appropriate for predicting new_cases as it is smaller MAE and RMSE compared with the multiple linear regression model
+```
+```{r}
+#Conclusion for which model to use for total_cases, total_deaths, and new_cases
+
+#Based on the result of the three cross-validation for data of 2020-10-16 specifically, the LASSO model would be a good fit for total_cases, total_deaths, and new_cases. 
+#However, since the LASSO model takes much long time within shiny than we expected, we will use the multiple linear regression model within the app and use the LASSO model within the paper.
+```
+
