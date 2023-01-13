@@ -1,6 +1,6 @@
 ---
 title: "Final Project - Importing and Cleaning Data"
-author: "Nora, Eve, Quan, Jenny"
+author: "Jenny, Nora, Eve, and Quan,"
 date: "5/10/2021"
 output:
   pdf_document: default
